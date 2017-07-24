@@ -1,6 +1,7 @@
 import json
 import random
 import sys
+import os
 
 import gevent, gevent.local, gevent.queue, gevent.server
 
@@ -20,12 +21,15 @@ class Server(object):
         self.addr = addr if addr is not None else '127.0.0.1'
         self.port = port if port is not None else 4242
 
+        self.stats = {}
+
     def game_reset(self):
         while True:
             # initialize the game state
             del self.states[:]
             state = self.board.starting_state()
             self.states.append(state)
+            self.stats = {}
 
             # update all players with the starting state
             state = self.board.unpack_state(state)
@@ -79,7 +83,7 @@ class Server(object):
                     self.local.run = False
 
                 elif data.get('state', {}).get('player') == self.local.player:
-                    message = socket.recv(4096)
+                    message = socket.recv(8192)
                     messages = message.rstrip().split('\r\n')
                     self.parse(messages[0]) # FIXME: support for multiple messages
                                             #        or out-of-band requests
@@ -94,15 +98,48 @@ class Server(object):
     def parse(self, msg):
         try:
             data = json.loads(msg)
-            if data.get('type') != 'action':
-                raise Exception
-            self.handle_action(data.get('message'))
+
+            # If we received multiple messages
+            # unpack them and call them in turn
+            if isinstance(data, list):
+                for m in data:
+                    self.parse(json.dumps(m))
+            else:
+                if data.get('type') == 'action':
+                    self.handle_action(data.get('message'))
+                elif data.get('type') == 'stats':
+                    self.update_stats(data.get('message'))
+                else:
+                    raise Exception
         except Exception:
+            print("== EXCEPTION ==")
             self.players[self.local.player].put({
                 'type': 'error', 'message': msg
             })
 
+    def update_stats(self, stats_entry):
+        # with open("debug.txt", 'a') as the_file:
+        #     the_file.write("stats")
+        for key, entry in stats_entry.iteritems():
+            if not key in self.stats:
+                self.stats[key] = {}
+
+                for x in xrange(1, self.board.num_players+1):
+                    self.stats[key][x] = []
+
+            for player, stat in entry.iteritems():
+                print("Player " + str(player) + ":")
+                self.stats[key][int(player)].append(stat)
+                # print("\t" + str(player) + " " + str(key) + ": " + str())
+                print("")
+                print("\t" + str(key) + ":")
+                print("\tMax: " + str(max(self.stats[key][int(player)])))
+                print("\tMin: " + str(min(self.stats[key][int(player)])))
+                print("\tAve: " + str(sum(self.stats[key][int(player)]) / float(len(self.stats[key][int(player)]))))
+
     def handle_action(self, notation):
+        # with open("debug.txt", 'a') as the_file:
+        #     the_file.write("action")
         action = self.board.pack_action(notation)
         if not self.board.is_legal(self.states, action):
             self.players[self.local.player].put({
@@ -123,9 +160,11 @@ class Server(object):
                 'sequence': len(self.states),
             },
         }
+
         if self.board.is_ended(self.states):
             data['winners'] = self.board.win_values(self.states)
             data['points'] = self.board.points_values(self.states)
+            data['stats'] = self.stats
 
         for x in xrange(1, self.board.num_players+1):
             self.players[x].put(data)
