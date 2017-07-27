@@ -4,6 +4,7 @@ import sys
 import os
 
 import gevent, gevent.local, gevent.queue, gevent.server
+from collections import defaultdict
 
 
 class Server(object):
@@ -28,6 +29,7 @@ class Server(object):
             # initialize the game state
             del self.states[:]
             state = self.board.starting_state()
+            # state = (1881801728, 11285645214616071, 2, 1)
             self.states.append(state)
             self.stats = {}
 
@@ -120,6 +122,12 @@ class Server(object):
     def update_stats(self, stats_entry):
         # with open("debug.txt", 'a') as the_file:
         #     the_file.write("stats")
+        table_data = list()
+        players = set()
+        table_header = ['']
+        table_header.extend(list(stats_entry.viewkeys()))
+        player_row = defaultdict(list)
+
         for key, entry in stats_entry.iteritems():
             if not key in self.stats:
                 self.stats[key] = {}
@@ -128,6 +136,22 @@ class Server(object):
                     self.stats[key][x] = []
 
             for player, stat in entry.iteritems():
+                players.add(player)
+
+                # player_row[player][key].append("Max", max(self.stats[key][int(player)])
+                # player_row[player].append("Min", min(self.stats[key][int(player)])
+                # player_row[player].append("Ave", sum(self.stats[key][int(player)]) / float(len(self.stats[key][int(player)])))
+                # player_row[player].append("Sum", sum(self.stats[key][int(player)])
+#                 from terminaltables import AsciiTable
+# >>> table_data = [
+# ... ['Heading1', 'Heading2'],
+# ... ['row1 column1', 'row1 column2'],
+# ... ['row2 column1', 'row2 column2'],
+# ... ['row3 column1', 'row3 column2'],
+# ... ]
+# >>> table = AsciiTable(table_data)
+# >>> print table.table
+                # table_data = [
                 print("Player " + str(player) + ":")
                 self.stats[key][int(player)].append(stat)
                 # print("\t" + str(player) + " " + str(key) + ": " + str())
@@ -136,6 +160,7 @@ class Server(object):
                 print("\tMax: " + str(max(self.stats[key][int(player)])))
                 print("\tMin: " + str(min(self.stats[key][int(player)])))
                 print("\tAve: " + str(sum(self.stats[key][int(player)]) / float(len(self.stats[key][int(player)]))))
+                print("\tSum: " + str(sum(self.stats[key][int(player)])))
 
     def handle_action(self, notation):
         # with open("debug.txt", 'a') as the_file:
